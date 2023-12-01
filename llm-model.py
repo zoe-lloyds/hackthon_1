@@ -1,24 +1,26 @@
-import json
+from google.cloud import aiplatform
+from vertexai.preview.language_models import TextEmbeddingModel
 
-with open('vector_search_dataset.json', 'r') as f:
-    embeddings_data = [json.loads(line) for line in f]
+class VertexAIVectorStore:
+    def __init__(self, project_id, location):
+        # You should replace the following index and endpoint names with your actual values
+        self.index_endpoint_name = "projects/{}/locations/{}/indexEndpoints/5891412000042385408".format(project_id, location)
+        self.index_name = "projects/{}/locations/{}/indexes/2680908415680643072".format(project_id, location)
+        self.gen_ai_index_endpoint = aiplatform.MatchingEngineIndexEndpoint(index_endpoint_name=self.index_endpoint_name)
+        self.gen_ai_index = aiplatform.MatchingEngineIndex(index_name=self.index_name)
 
-# Extract embeddings and IDs
-embedding_vectors = [entry['embedding'] for entry in embeddings_data]
-ids = [entry['id'] for entry in embeddings_data]
+    def search(self, input_text, k=3):
+        # Assuming you have a model initialized somewhere
+        model = TextEmbeddingModel.from_pretrained("textembedding-gecko@001")
 
-# Example using Hugging Face Transformers library and a pre-trained BERT model
-from transformers import BertModel, BertTokenizer
+        embedding_vec = model.get_embeddings([input_text])[0].values
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
+        # Find neighbors using vector search
+        neighbors = self.gen_ai_index_endpoint.find_neighbors(
+            deployed_index_id="gen_ai_deployed_index",
+            queries=[embedding_vec],
+            num_neighbors=k,
+        )[0]
 
-
-# Example tokenization for BERT
-tokenized_inputs = tokenizer(['your text data here'], return_tensors='pt', padding=True, truncation=True)
-
-with torch.no_grad():
-    model_output = model(**tokenized_inputs, inputs_embeds=torch.tensor(embedding_vectors))
-
-# Example: Extract features from the output
-features = model_output.last_hidden_state
+        for nb in neighbors:
+            print("id: " + nb.id + " | text: " + df.iloc[int(nb.id)]["text"] + " | dist: " + str(nb.distance))
