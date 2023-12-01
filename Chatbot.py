@@ -27,3 +27,54 @@ if prompt := st.chat_input():
     msg = response.choices[0].message.content
     st.session_state.messages.append({"role": "assistant", "content": msg})
     st.chat_message("assistant").write(msg)
+
+from vertexai.preview.language_models import ChatModel
+
+class CustomPaLMWrapper:
+    def _init_(self):
+        self.chat_model = ChatModel.from_pretrained("chat-bison@001")
+        self.parameters = {
+            "temperature": 0.2,
+            "max_output_tokens": 256,
+            "top_p": 0.95,
+        }
+
+    def generate_response(self, context, message):
+        chat = self.chat_model.start_chat(context)
+        response = chat.send_message(message, **self.parameters)
+        return response.text
+
+
+from operator import itemgetter
+
+from langchain.chat_models import ChatOpenAI
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
+from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
+from langchain.vectorstores import FAISS
+
+vectorstore = FAISS.from_texts(
+    ["harrison worked at kensho"], embedding=OpenAIEmbeddings()
+)
+retriever = vectorstore.as_retriever()
+
+template = """Answer the question based only on the following context:
+{context}
+
+Question: {question}
+"""
+prompt = ChatPromptTemplate.from_template(template)
+
+model = ChatOpenAI()
+
+chain = (
+    {"context": retriever, "question": RunnablePassthrough()}
+    | prompt
+    | model
+    | StrOutputParser()
+)
+
+chain.invoke("where did harrison work?")
+
+    'Harrison worked at Kensho.'
